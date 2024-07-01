@@ -4,7 +4,7 @@ go 1.21.1
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.6.6
-	github.com/tinne26/ggfnt v0.0.1
+	github.com/tinne26/ggfnt v0.0.0-20240701093853-0332791c25f2
 )
 
 require (
@@ -16,5 +16,3 @@ require (
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 )
-
-replace github.com/tinne26/ggfnt => ../ggfnt
