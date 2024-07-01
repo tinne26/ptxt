@@ -1,0 +1,19 @@
+# ignore unused folder
+unused/
+
+# ignore go workspaces
+# (notice: most projects should *not* ignore workspaces)
+*.work
+*.work.sum
+
+# ignore fonts for testing
+*.ggfnt
+
+# ignore test debug images
+testfail_*.png
+
+# ignore debug helpers
+debug.go
+
+# don't share the dirty secrets
+TODO.md
