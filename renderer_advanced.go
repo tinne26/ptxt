@@ -238,16 +238,21 @@ func (self *RendererAdvanced) GetParBreakEnabled() bool {
 // You may change the target, horz/sideways text directions and colors
 // if you want, but you can't change scale nor line wrap max length...
 // or things will get messy. Well, maybe that counts as a use-case...
-//
-// TODO: mention lack of begin/finish passes and possible side
-// effects?
 func (self *RendererAdvanced) DrawFromBuffer(target core.Target, x, y int) {
 	(*Renderer)(self).drawFromBuffer(target, x, y)
 }
 
 func (self *Renderer) drawFromBuffer(target core.Target, x, y int) {
+	if self.Strand() == nil {
+		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
+	}
+
+	mapping := self.Strand().Mapping()
+	err := lnkBeginPass(mapping, strand.BufferPass)
+	if err != nil { panic(err) }
 	x, y = self.computeTextOrigin(x, y)
 	self.drawText(target, x, y)
+	lnkFinishPass(mapping, strand.BufferPass)
 }
 
 // func (self *RendererAdvanced) LastOpEndPos() (x, y int, outOfBounds bool) {}

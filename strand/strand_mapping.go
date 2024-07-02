@@ -9,7 +9,7 @@ import "github.com/tinne26/ggfnt"
 // now (see ggfnt's spec directly if necessary).
 //
 // In general, this type is used through method chaining:
-//   strand.Mapping().SetRewriteRulesEnabled(true)
+//   strand.Mapping().AutoInitRewriteRules()
 type StrandMapping Strand
 
 // Gateway to [StrandMapping].

@@ -49,10 +49,11 @@ type GlyphPicker interface {
 }
 
 // Related to [GlyphPicker].
-type GlyphPickerPass uint8
+type GlyphPickerPass = uint8
 const (
 	MeasurePass GlyphPickerPass = iota
 	DrawPass
+	BufferPass
 )
 
 // In some cases you will need to use multiple [GlyphPicker] interfaces on

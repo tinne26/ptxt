@@ -238,12 +238,13 @@ func (self *Renderer) Draw(target core.Target, text string, x, y int) {
 func (self *Renderer) DrawWithWrap(target core.Target, text string, x, y int, maxLineLen int) {
 	// convert the input from code points to glyphs
 	// (this includes rewrite rules and glyph selection)
-	mapping := self.Strand().Mapping()
-	err := lnkBeginPass(mapping, strand.DrawPass)
-	if err != nil { panic(err) }
 	if self.Strand() == nil {
 		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
 	}
+
+	mapping := self.Strand().Mapping()
+	err := lnkBeginPass(mapping, strand.DrawPass)
+	if err != nil { panic(err) }
 	self.run.glyphIndices = self.run.glyphIndices[ : 0]
 	for _, codePoint := range text {
 		self.run.glyphIndices = lnkAppendCodePoint(mapping, codePoint, self.run.glyphIndices)
@@ -306,14 +307,15 @@ func (self *Renderer) MeasureWithWrap(text string, maxLineLen int) (width, heigh
 	// single lines if their use-case demands it. We could technically make
 	// it an Advanced() flag too, but it seems a bit too much to me.
 
+	if self.Strand() == nil {
+		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
+	}
+
 	// convert the input from code points to glyphs
 	// (this includes rewrite rules and glyph selection)
 	mapping := self.Strand().Mapping()
 	err := lnkBeginPass(mapping, strand.MeasurePass)
 	if err != nil { panic(err) }
-	if self.Strand() == nil {
-		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
-	}
 	self.run.glyphIndices = self.run.glyphIndices[ : 0]
 	for _, codePoint := range text {
 		self.run.glyphIndices = lnkAppendCodePoint(mapping, codePoint, self.run.glyphIndices)
