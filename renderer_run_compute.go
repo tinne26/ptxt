@@ -48,7 +48,7 @@ func (self *Renderer) computeTextOrigin(x, y int) (int, int) {
 		shift = -self.run.bottom
 	case LastBaseline:
 		if self.run.isMultiline { // multi-line text
-			shift = -(self.run.bottom + self.run.lastLineDescent)
+			shift = -(self.run.bottom - self.run.lastLineDescent)
 		} else { // single line text, last baseline == first baseline
 			shift = 0
 		}
