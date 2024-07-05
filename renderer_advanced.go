@@ -231,7 +231,7 @@ func (self *RendererAdvanced) GetParBreakEnabled() bool {
 // it directly without additional recomputations. This obviously
 // makes this operation very low-level and unsafe.
 //
-// There are two main use-cases for this function are:
+// The two main use-cases for this function are:
 //  - Optimize Measure + Draw => Measure + DrawFromBuffer.
 //  - Perform the same Draw repeatedly at different places or targets.
 //

@@ -88,7 +88,13 @@ func (self *StrandMapping) testerAppendGlyphIndexFunc(glyphIndex ggfnt.GlyphInde
 func (self *StrandMapping) testerAppendCodePointFunc(codePoint rune) {
 	// get glyph group for the code point, pick one glyph from it
 	var glyphIndex ggfnt.GlyphIndex = ggfnt.GlyphMissing
-	group, found := self.font.Mapping().Utf8(codePoint, self.settings.UnsafeSlice())
+	var group ggfnt.GlyphMappingGroup
+	var found bool
+	if self.mappingCache != nil {
+		group, found = self.mappingCache.Get(codePoint, &self.settings)
+	} else {
+		group, found = self.font.Mapping().Utf8WithCache(codePoint, &self.settings)
+	}
 	if found {
 		size := group.Size()
 		flags := group.AnimationFlags()

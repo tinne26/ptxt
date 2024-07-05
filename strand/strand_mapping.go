@@ -17,6 +17,19 @@ func (self *Strand) Mapping() *StrandMapping {
 	return (*StrandMapping)(self)
 }
 
+// Recommended sizes oscillate between 64 and 1024,
+// with 192 being common. If the size is <= 0, the
+// cache will be set to nil.
+func (self *StrandMapping) ConfigureCache(size int) {
+	if size <= 0 {
+		self.mappingCache = nil
+	} else {
+		maxSize := int(self.font.Glyphs().Count())
+		if maxSize < size { size = maxSize }
+		self.mappingCache = ggfnt.NewMappingCache(self.font, size)
+	}
+}	
+
 // Enables or disables rewrite rule processing for the strand.
 // Even if disabled, previously configured rules remain stored
 // and can be re-enabled at a later point.

@@ -65,8 +65,7 @@ type Strand struct {
 	// only re-link the renderer buffer on StrandMapping.finish*() operations, but that
 	// wouldn't work with twines, which need some stuff added at arbitrary points on the
 	// renderer side.
-
-	// switchCache, mappingCache
+	mappingCache *ggfnt.MappingCache
 
 	// wrap glyphs
 	spaceGlyph ggfnt.GlyphIndex
@@ -181,10 +180,13 @@ func (self *Strand) SetSetting(key ggfnt.SettingKey, option uint8) {
 	// TODO: what about mapping? what about state? if not running
 	//       or rules disabled, I should set a pendingReConditionsRefresh
 	//       bool = true
-	_, rewriteConditionsAffected := self.settings.Set(key, option)
+	mappingCasesAffected, rewriteConditionsAffected := self.settings.Set(key, option)
 	if rewriteConditionsAffected {
 		self.glyphTester.RefreshConditions(self.font, &self.settings)
 		self.utf8Tester.RefreshConditions(self.font, &self.settings)
+	}
+	if mappingCasesAffected && self.mappingCache != nil {
+		self.mappingCache.Drop()
 	}
 }
 
