@@ -50,10 +50,10 @@ type Strand struct {
 
 	// coloring
 	mainDyeKey ggfnt.DyeKey
-	minColorIndex uint8
+	fontColorPalettesStartIndex uint8
 	mainDyeRGBA8 color.RGBA
-	palette []float32
-	dyes []float32 // indexed with ggfnt.DyeKey*4
+	fontColors rgbaSlice // including indices and palettes, up to 255 RGBA sets
+	dyes rgbaSlice // indexed directly with ggfnt.DyeKey
 
 	// mapping and rewrites
 	utf8Tester rerules.Utf8Tester
@@ -88,58 +88,34 @@ func New(font *ggfnt.Font) *Strand {
 	// initialize colors
 	numColors := font.Color().Count()
 	if numColors == 0 { panic("invalid font") }
-	palette := make([]float32, int(numColors)*4)
-	minColorIndex := (255 - numColors) + 1
+	fontColors := newRGBASlice(int(numColors))
+	fontColorIndex := 0
 
 	// initialize dyes
 	mainDyeKey := NoDyeKey // regular dye keys can't reach this value
-	dyes := make([]float32, int(font.Color().NumDyes()) << 2)
+	dyes := newRGBASlice(int(font.Color().NumDyes()))
 	font.Color().EachDye(func(key ggfnt.DyeKey, name string) {
 		if name == "main" {
 			if mainDyeKey != NoDyeKey { panic("font contains multiple 'main' dye keys") }
 			mainDyeKey = key
 		}
-		dyeBaseIndex := int(key) << 2
-		dyes[dyeBaseIndex + 0] = 1.0 // default to white
-		dyes[dyeBaseIndex + 1] = 1.0 // default to white
-		dyes[dyeBaseIndex + 2] = 1.0 // default to white
-		dyes[dyeBaseIndex + 3] = 1.0 // default to white
-		
-		// TODO: consider refactoring. same for palette color setting.
-		start, end := font.Color().GetDyeRange(key)
-		if start < minColorIndex { panic(brokenCode) }
-		if end < start { panic(brokenCode) } // kinda paranoid
-		start -= minColorIndex
-		colorIndex := int(start)*4
+		dyes.Set(int(key), [4]float32{1.0, 1.0, 1.0, 1.0}) // default to white
 		font.Color().EachDyeAlpha(key, func(alpha uint8) {
 			alpha32 := float32(alpha)/255.0
-			palette[colorIndex + 0] = alpha32
-			palette[colorIndex + 1] = alpha32
-			palette[colorIndex + 2] = alpha32
-			palette[colorIndex + 3] = alpha32
-			colorIndex += 4
+			fontColors.Set(fontColorIndex, [4]float32{alpha32, alpha32, alpha32, alpha32})
+			fontColorIndex += 1
 		})
-		if colorIndex != ((int(end) + 1) - int(minColorIndex))*4 { panic(brokenCode) } // safety check
 	})
 
 	// initialize paletted colors
 	font.Color().EachPalette(func(key ggfnt.PaletteKey, _ string) {
-		start, end := font.Color().GetPaletteRange(key)
-		if start < minColorIndex { panic("broken code") }
-		if end < start { panic("ggfnt broken code") } // kinda paranoid
-		start -= minColorIndex
-		end   -= minColorIndex
-		colorIndex := int(start)*4
 		font.Color().EachPaletteColor(key, func(rgba color.RGBA) {
 			rgbaF32 := internal.RGBAToFloat32(rgba)
-			palette[colorIndex + 0] = rgbaF32[0]
-			palette[colorIndex + 1] = rgbaF32[1]
-			palette[colorIndex + 2] = rgbaF32[2]
-			palette[colorIndex + 3] = rgbaF32[3]
-			colorIndex += 4
+			fontColors.Set(fontColorIndex, rgbaF32)
+			fontColorIndex += 1
 		})
-		if colorIndex != (int(end - minColorIndex) << 2) { panic("broken code") } // safety check
 	})
+	if fontColorIndex > 255 { panic(brokenCode) } // invalid font data
 
 	// set up wrap glyphs (look for space only, by default)
 	group, found := font.Mapping().Utf8(' ', settings.UnsafeSlice())
@@ -156,8 +132,7 @@ func New(font *ggfnt.Font) *Strand {
 	strand := &Strand{
 		font: font,
 		settings: *settings,
-		minColorIndex: minColorIndex,
-		palette: palette,
+		fontColors: fontColors,
 		dyes: dyes,
 		spaceGlyph: spaceGlyph,
 	}
@@ -280,10 +255,8 @@ func (self *Strand) AddGlyphWithPlacement(mask core.GlyphMask, placement ggfnt.G
 func (self *Strand) Recolor(paletteKey ggfnt.PaletteKey, colors ...color.RGBA) {
 	// get palette range and check sizes
 	if self.font == nil { panic("font is nil, can't overwrite any palettes") }
-	start, end := self.font.Color().GetPaletteRange(paletteKey)
-	if start == 0 { panic("invalid palette key") }
-	paletteSize := int(end - start) + 1
-	if len(colors) != paletteSize {
+	paletteSize := self.font.Color().NumPaletteColors(paletteKey)
+	if len(colors) != int(paletteSize) {
 		panic("number of colors does not match palette size")
 	}
 
@@ -294,19 +267,11 @@ func (self *Strand) Recolor(paletteKey ggfnt.PaletteKey, colors ...color.RGBA) {
 	}
 
 	// apply each color
-	colorIndex := (int(start - self.minColorIndex) << 2)
+	firstPaletteIndex := self.font.Color().NumDyeIndices()
+	fontColorIndex := firstPaletteIndex + uint8(paletteKey)
 	for i, _ := range colors {
-		rgbaF32 := internal.RGBAToFloat32(colors[i])
-		self.palette[colorIndex + 0] = rgbaF32[0]
-		self.palette[colorIndex + 1] = rgbaF32[1]
-		self.palette[colorIndex + 2] = rgbaF32[2]
-		self.palette[colorIndex + 3] = rgbaF32[3]
-		colorIndex += 4
-	}
-	
-	// small assertion for safety
-	if colorIndex != (int(end - self.minColorIndex) << 2) {
-		panic("unsafe code usage detected")
+		self.fontColors.Set(int(fontColorIndex), internal.RGBAToFloat32(colors[i]))
+		fontColorIndex += 1
 	}
 
 	// notify changes

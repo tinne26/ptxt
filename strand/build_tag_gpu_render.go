@@ -35,14 +35,12 @@ var NumUsedPaletteEntries int // this is static per strand
 
 // fragment shader entry point
 func Fragment(targetCoords vec4, sourceCoords vec2, mainDye vec4) vec4 {
-	paletteIndex := int(imageSrc0UnsafeAt(sourceCoords).a*255.0)
-	if paletteIndex == 0 { discard() }
+	fontColorIndex := int(imageSrc0UnsafeAt(sourceCoords).a*255.0)
+	if fontColorIndex == 0 { discard() } // transparent
+	fontColorIndex -= 1
 
-	firstDyeIndex := 256 - len(DyeMappings)
-	if paletteIndex < firstDyeIndex { // static color
-		return Palette[paletteIndex]
-	} else { // dye color
-		dyeKey := DyeMappings[paletteIndex - firstDyeIndex]
+	if fontColorIndex < len(DyeMappings) { // dye color
+		dyeKey := DyeMappings[fontColorIndex]
 		var dyeColor vec4
 		if dyeKey == MainDyeKey {
 			dyeColor = mainDye
@@ -50,18 +48,18 @@ func Fragment(targetCoords vec4, sourceCoords vec2, mainDye vec4) vec4 {
 			dyeColor = DyeColors[dyeKey]
 		}
 
-		adjustedPaletteEntryIndex := paletteIndex - (256 - NumUsedPaletteEntries)
-		alpha := Palette[adjustedPaletteEntryIndex << 2]
-		return dyeColor*alpha
+		return dyeColor*Palette[fontColorIndex]
+	} else { // static color
+		return Palette[fontColorIndex]
 	}
 }
 `)
 
 // Shader uniforms, as inferred from palette_drawer.kage:
-// > DyeMappings []uint8
+// > DyeMappings []uint8 // from dye alpha index to dye key
 // > MainDyeKey uint8
-// > DyeColors []uint8
-// > Palette []uint8 // (dyes take x4 the required space, but we don't add unused colors)
+// > DyeColors []vec4
+// > Palette []vec4 // (dyes take x4 the required space, but we don't add unused colors)
 // > NumUsedPaletteEntries uint8
 
 type renderData struct {
@@ -74,7 +72,7 @@ type renderData struct {
 func (self *Strand) renderDataInit() {
 	var uint8To3Bytes = func(value uint8) (byte, byte, byte) {
 		d3 := '0' + (value % 10)
-		if value < 10 { return ' ', '0', d3 }
+		if value < 10 { return ' ', ' ', d3 }
 		value /= 10
 		d2 := '0' + (value % 10)
 		if value < 10 { return ' ', d2, d3 }
@@ -84,7 +82,7 @@ func (self *Strand) renderDataInit() {
 	}
 
 	// helper variable needed later
-	numDyeAlphas := self.font.Color().DyeAlphasCount()
+	numDyeIndices := self.font.Color().NumDyeIndices()
 	
 	// compile shader
 	var err error
@@ -93,17 +91,17 @@ func (self *Strand) renderDataInit() {
 	arg3Pos := bytes.Index(paletteDrawerShaderSource, []byte{'{', '3', '}'})
 	if arg1Pos == -1 || arg2Pos == -1 { panic(brokenCode) }
 	
-	b1, b2, b3 := uint8To3Bytes(numDyeAlphas)
+	b1, b2, b3 := uint8To3Bytes(numDyeIndices)
 	paletteDrawerShaderSource[arg1Pos + 0] = b1
 	paletteDrawerShaderSource[arg1Pos + 1] = b2
 	paletteDrawerShaderSource[arg1Pos + 2] = b3
 
-	b1, b2, b3  = uint8To3Bytes(uint8(len(self.dyes) >> 2))
+	b1, b2, b3  = uint8To3Bytes(uint8(self.dyes.Len()))
 	paletteDrawerShaderSource[arg2Pos + 0] = b1
 	paletteDrawerShaderSource[arg2Pos + 1] = b2
 	paletteDrawerShaderSource[arg2Pos + 2] = b3
 
-	b1, b2, b3  = uint8To3Bytes(uint8(len(self.palette) >> 2))
+	b1, b2, b3  = uint8To3Bytes(uint8(self.fontColors.Len()))
 	paletteDrawerShaderSource[arg3Pos + 0] = b1
 	paletteDrawerShaderSource[arg3Pos + 1] = b2
 	paletteDrawerShaderSource[arg3Pos + 2] = b3
@@ -127,19 +125,18 @@ func (self *Strand) renderDataInit() {
 	self.re.shaderOptions.Uniforms["MainDyeKey"] = self.mainDyeKey
 	self.re.shaderOptions.Uniforms["NumUsedPaletteEntries"] = self.font.Color().Count()
 	
-	// dye mappings point from color index to dye tone index
+	// dye mappings point from font color index to dye index.
 	// the actual alphas are stored in the palette instead
-	dyeMappings := make([]int32, numDyeAlphas)
-	minDyeIndex := (255 - numDyeAlphas) + 1
+	dyeMappings := make([]int32, numDyeIndices)
+	var fontColorIndex uint8
 	for i := uint8(0); i < self.font.Color().NumDyes(); i++ {
-		start, end := self.font.Color().GetDyeRange(ggfnt.DyeKey(i))
-		if start == 0 && end == 0 { panic(brokenCode) } // or broken font
-		if start < minDyeIndex { panic(brokenCode) } // or broken font
-		start -= minDyeIndex
-		end   -= minDyeIndex
-		for j := start; j <= end; j++ {
-			dyeMappings[j] = int32(i)
+		alphaCount := self.font.Color().NumDyeAlphas(ggfnt.DyeKey(i))
+		if alphaCount == 0 { panic(brokenCode) } // or broken font
+		for j := uint8(0); j < alphaCount; j++ {
+			dyeMappings[fontColorIndex] = int32(i)
+			fontColorIndex += 1
 		}
+		if fontColorIndex > 255 { panic(brokenCode) }
 	}
 	self.re.shaderOptions.Uniforms["DyeMappings"] = dyeMappings
 
@@ -153,12 +150,12 @@ func (self *Strand) setBlendMode(blend ebiten.Blend) {
 
 // must be called any time a dye color is changed
 func (self *Strand) notifyShaderNonMainDyeChange() {
-	self.re.shaderOptions.Uniforms["DyeColors"] = self.dyes
+	self.re.shaderOptions.Uniforms["DyeColors"] = self.dyes.data
 }
 
 // must be called any time a palette range is changed
 func (self *Strand) notifyShaderPaletteChange() {
-	self.re.shaderOptions.Uniforms["Palette"] = self.palette
+	self.re.shaderOptions.Uniforms["Palette"] = self.fontColors.data
 }
 
 // Precondition: scale is already overriden from the strand if necessary.

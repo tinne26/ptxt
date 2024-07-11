@@ -12,16 +12,10 @@ func (self *Strand) SetDye(dyeKey ggfnt.DyeKey, rgba color.RGBA) {
 	if dyeKey == self.mainDyeKey {
 		self.SetMainDye(rgba)
 	} else {
+		// discretionary safety assertions
 		if !isPremultiplied(rgba) { panic(nonPremultRGBA) }
-		dyeBaseIndex := int(dyeKey) << 2
-		if dyeBaseIndex + 3 >= len(self.dyes) { // discretionary safety assertion
-			panic("invalid dye key")
-		}
-		rgbaF32 := internal.RGBAToFloat32(rgba)
-		self.dyes[dyeBaseIndex + 0] = rgbaF32[0]
-		self.dyes[dyeBaseIndex + 1] = rgbaF32[1]
-		self.dyes[dyeBaseIndex + 2] = rgbaF32[2]
-		self.dyes[dyeBaseIndex + 3] = rgbaF32[3]
+		if int(dyeKey) >= self.dyes.Len() { panic("invalid dye key") }
+		self.dyes.Set(int(dyeKey), internal.RGBAToFloat32(rgba))
 		self.notifyShaderNonMainDyeChange()
 	}
 }
@@ -29,16 +23,9 @@ func (self *Strand) SetDye(dyeKey ggfnt.DyeKey, rgba color.RGBA) {
 // Returns the color of the requested dye.
 // Invalid dye keys will panic.
 func (self *Strand) GetDye(dyeKey ggfnt.DyeKey) [4]float32 {
-	dyeBaseIndex := int(dyeKey) << 2
-	if dyeBaseIndex + 3 >= len(self.dyes) { // discretionary safety assertion
-		panic("invalid dye key")
-	}
-	return [4]float32{
-		self.dyes[dyeBaseIndex + 0],
-		self.dyes[dyeBaseIndex + 1],
-		self.dyes[dyeBaseIndex + 2],
-		self.dyes[dyeBaseIndex + 3],
-	}
+	// discretionary safety assertion
+	if int(dyeKey) >= self.dyes.Len() { panic("invalid dye key") }
+	return self.dyes.At(int(dyeKey))
 }
 
 // Can be used to check whether the main dye of a font is
@@ -63,12 +50,7 @@ func (self *Strand) SetMainDye(rgba color.RGBA) {
 	if !isPremultiplied(rgba) { panic(nonPremultRGBA) }
 	self.mainDyeRGBA8 = rgba
 	self.setFlag(strandMainDyeColorActive, true)
-	dyeBaseIndex := int(self.mainDyeKey) << 2
-	rgbaF32 := internal.RGBAToFloat32(rgba)
-	self.dyes[dyeBaseIndex + 0] = rgbaF32[0]
-	self.dyes[dyeBaseIndex + 1] = rgbaF32[1]
-	self.dyes[dyeBaseIndex + 2] = rgbaF32[2]
-	self.dyes[dyeBaseIndex + 3] = rgbaF32[3]
+	self.dyes.Set(int(self.mainDyeKey), internal.RGBAToFloat32(rgba))
 }
 
 // Returns the strand's main dye color. This is sometimes

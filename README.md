@@ -14,7 +14,7 @@ package main
 import ( "math" ; "image/color" )
 import "github.com/hajimehoshi/ebiten/v2"
 import "github.com/tinne26/ptxt"
-import "github.com/tinne26/ggfnt-fonts/jammy"
+import "github.com/tinne26/ggfnt-fonts/graybit"
 
 const CanvasWidth, CanvasHeight = 80, 45 // 1/24th of 1920x1080
 const WordsPerSec = 2.71828
@@ -59,7 +59,7 @@ func (self *Game) Draw(hiResCanvas *ebiten.Image) {
 
 func main() {
 	// initialize font strand
-	strand, err := ptxt.NewStrand(jammy.Font())
+	strand, err := ptxt.NewStrand(graybit.Font())
 	if err != nil { panic(err) }
 	
 	// create text renderer, set the main properties

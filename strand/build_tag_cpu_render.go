@@ -19,20 +19,19 @@ type renderData struct {
 }
 
 func (self *Strand) renderDataInit() {
-	// dye mappings point from color index to dye tone index
+	// dye mappings point from font color index to dye index.
 	// the actual alphas are stored in the palette instead
-	numDyeAlphas := self.font.Color().DyeAlphasCount()
-	dyeMappings := make([]uint8, numDyeAlphas)
-	minDyeIndex := (255 - numDyeAlphas) + 1
+	numDyeIndices := self.font.Color().NumDyeIndices()
+	dyeMappings := make([]uint8, numDyeIndices)
+	var fontColorIndex uint8
 	for i := uint8(0); i < self.font.Color().NumDyes(); i++ {
-		start, end := self.font.Color().GetDyeRange(ggfnt.DyeKey(i))
-		if start == 0 && end == 0 { panic(brokenCode) } // or broken font
-		if start < minDyeIndex { panic(brokenCode) } // or broken font
-		start -= minDyeIndex
-		end   -= minDyeIndex
-		for j := start; j <= end; j++ {
-			dyeMappings[j] = i
+		alphaCount := self.font.Color().NumDyeAlphas(ggfnt.DyeKey(i))
+		if alphaCount == 0 { panic(brokenCode) } // or broken font
+		for j := uint8(0); j < alphaCount; j++ {
+			dyeMappings[fontColorIndex] = i
+			fontColorIndex += 1
 		}
+		if fontColorIndex > 255 { panic(brokenCode) }
 	}
 	self.re.dyeMappings = dyeMappings
 }
@@ -132,13 +131,11 @@ func (self *Strand) setBlendMode(blend core.BlendMode) {
 	self.re.blend = blend
 }
 
-func (self *Strand) drawMask(target core.Target, mask core.GlyphMask, x, y int, scale int, rgba [4]float32, orientation uint8) {
+func (self *Strand) drawMask(target core.Target, mask core.GlyphMask, x, y int, scale int, mainDye [4]float32, orientation uint8) {
 	// helpers
 	blendFunc := self.re.GetBlendFunc()
-	firstDyeIndex := uint(256 - len(self.re.dyeMappings))
-	numUsedPaletteEntries := uint(self.font.Color().Count())
 	var prevColor [4]float32
-	var prevIndex uint = 9999
+	var prevIndex int = 9999
 	
 	// extremely slow and naive approach
 	srcRect := mask.Bounds()
@@ -147,41 +144,40 @@ func (self *Strand) drawMask(target core.Target, mask core.GlyphMask, x, y int, 
 		for ix := srcRect.Min.X; ix < srcRect.Max.X; ix++ {
 			// get color at the given point
 			var clr [4]float32
-			colorIndex := uint(mask.AlphaAt(ix, iy).A)
-			if colorIndex == 0 { // reserved for transparent
+			fontColorIndex := int(mask.AlphaAt(ix, iy).A)
+			if fontColorIndex == 0 { // reserved for transparent
 				if self.re.blend != core.BlendReplace { continue }
 				clr = [4]float32{0, 0, 0, 0}
 			} else {
-				if prevIndex == colorIndex {
+				adjustedColorIndex := fontColorIndex - 1
+				if prevIndex == fontColorIndex {
 					clr = prevColor // fast repeated case
-				} else if colorIndex < firstDyeIndex { // static color
-					baseIndex := (colorIndex << 2)
-					clr = ([4]float32)(self.palette[baseIndex : baseIndex + 4])
-				} else { // dye color
-					dyeIndex := self.re.dyeMappings[colorIndex - firstDyeIndex]
-					if dyeIndex == uint8(self.mainDyeKey) {
-						clr = rgba
+				} else if adjustedColorIndex < len(self.re.dyeMappings) {
+					dyeKey := self.re.dyeMappings[adjustedColorIndex]
+					if dyeKey == uint8(self.mainDyeKey) {
+						clr = mainDye
 					} else {
-						baseIndex := (uint(dyeIndex) << 2)
-						copy(clr[:], self.palette[baseIndex : baseIndex + 4])
+						clr = self.fontColors.At(int(dyeKey))
 					}
-	
+
 					// apply dye alpha
-					alphaIndex := colorIndex - (256 - numUsedPaletteEntries)
-					alpha := self.palette[alphaIndex << 2]
+					alpha := self.fontColors.At(adjustedColorIndex)[3]
 					if alpha != 1.0 {
 						clr[0] *= alpha
 						clr[1] *= alpha
 						clr[2] *= alpha
 						clr[3] *= alpha
 					}
+				} else { // static color
+					clrCopy := self.fontColors.At(adjustedColorIndex)
+					clr = clrCopy
 				}
 			}
 
 			// memorize results for potential reuse in successive iterations
-			if colorIndex != prevIndex {
+			if fontColorIndex != prevIndex {
 				prevColor = clr
-				prevIndex = colorIndex
+				prevIndex = fontColorIndex
 
 				// clear previous blend temp variables
 				self.re.prevTR, self.re.prevTG, self.re.prevTB, self.re.prevTA = 2, 2, 2, 1 // invalid (non-premult)
