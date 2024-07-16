@@ -76,12 +76,22 @@ func lnkDrawSidewaysMask(*strand.Strand, core.Target, core.GlyphMask, int, int, 
 //go:linkname lnkDrawSidewaysRightMask github.com/tinne26/ptxt/strand.(*Strand).drawSidewaysRightMask
 func lnkDrawSidewaysRightMask(*strand.Strand, core.Target, core.GlyphMask, int, int, int, [4]float32)
 
-func strandFullHorzInterspacing(fontStrand *strand.Strand) int {
+func strandFullGlyphInterspacing(fontStrand *strand.Strand) int {
 	horzInterspacing := fontStrand.Font().Metrics().HorzInterspacing()
-	return int(horzInterspacing) + int(fontStrand.HorzInterspacingShift())
+	return int(horzInterspacing) + int(fontStrand.GlyphInterspacingShift())
 }
 
-func strandFullVertLineHeight(fontStrand *strand.Strand) int {
+func strandFullVertGlyphInterspacing(fontStrand *strand.Strand) int {
+	vertInterspacing := fontStrand.Font().Metrics().VertInterspacing()
+	return int(vertInterspacing) + int(fontStrand.GlyphInterspacingShift())
+}
+
+func strandFullLineHeight(fontStrand *strand.Strand) int {
 	lineHeight := fontStrand.Font().Metrics().LineHeight()
-	return lineHeight + int(fontStrand.VertInterspacingShift())
+	return lineHeight + int(fontStrand.LineInterspacingShift())
+}
+
+func strandFullLineWidth(fontStrand *strand.Strand) int {
+	lineWidth := fontStrand.Font().Metrics().VertLineFullWidth()
+	return lineWidth + int(fontStrand.LineInterspacingShift())
 }

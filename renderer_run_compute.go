@@ -42,13 +42,19 @@ func (self *Renderer) computeTextOrigin(x, y int) (int, int) {
 		}
 	case VertCenter:
 		shift = -self.run.top - ((self.run.bottom - self.run.top) >> 1)
+		if self.direction == Vertical { shift = 0 } // done per line on computeVertLineStart
 	case Baseline:
 		shift = 0
 	case Bottom: 
 		shift = -self.run.bottom
+		if self.direction == Vertical { shift = 0 } // done per line on computeVertLineStart
 	case LastBaseline:
+		if self.direction == Vertical { // TODO: maybe I want to define this
+			panic("Vertical rendering doesn't support LastBaseline align")
+		}
+
 		if self.run.isMultiline { // multi-line text
-			shift = -(self.run.bottom - self.run.lastLineDescent)
+			shift = -(self.run.bottom - self.run.lastRowDescent)
 		} else { // single line text, last baseline == first baseline
 			shift = 0
 		}
@@ -58,7 +64,15 @@ func (self *Renderer) computeTextOrigin(x, y int) (int, int) {
 
 	switch self.direction {
 	case Horizontal    : return x, y + shift
-	case Vertical      : panic("unimplemented")
+	case Vertical:
+		switch self.align.Horz() {
+		case Left       : x = x - self.run.left
+		case HorzCenter : x = x - ((self.run.right + self.run.left) >> 1)
+		case Right      : x = x - self.run.right
+		default:
+			panic(brokenCode)
+		}
+		return x, y + shift
 	case Sideways      : return x + shift, y
 	case SidewaysRight : return x - shift, y
 	default:
@@ -76,7 +90,7 @@ func (self *Renderer) computeTextOrigin(x, y int) (int, int) {
 //   first conversion step. ok I guess.
 
 // Spaces at the end of line are counted. They can be elided on wrap modes,
-// but not here. TODO: separate vertical text direction handling.
+// but not here.
 func (self *Renderer) computeRunLayout(maxLineLen int) {
 	// resize advances buffer, clear metrics
 	self.run.isMultiline = false
@@ -85,18 +99,33 @@ func (self *Renderer) computeRunLayout(maxLineLen int) {
 	self.run.wrapIndices = self.run.wrapIndices[ : 0]
 	self.run.lineLengths = self.run.lineLengths[ : 0]
 	self.run.top, self.run.bottom, self.run.left, self.run.right = 0, 0, 0, 0
-	self.run.firstLineAscent = 0
-	self.run.lastLineDescent = 0
+	self.run.firstRowAscent = 0
+	self.run.lastRowDescent = 0
 	if self.boundingMode == 0 { self.boundingMode = LogicalBounding } // default init
 	if len(self.run.glyphIndices) == 0 { return } // trivial case
-	switch self.boundingMode & ^noDescent {
-	case LogicalBounding:
-		self.computeRunLogicalLayout(maxLineLen)
-	case MaskBounding:
-		self.computeRunMaskLayout(maxLineLen)
-	default:
-		panic("unexpected bounding mode")
+	
+	const unexpectedBoundingMode = "unexpected bounding mode"
+	if self.direction == Vertical {
+		self.run.horzShifts = setBufferSize(self.run.horzShifts, len(self.run.glyphIndices))
+		switch self.boundingMode & ^noDescent {
+		case LogicalBounding:
+			self.computeVerticalRunLogicalLayout(maxLineLen)
+		case MaskBounding:
+			self.computeVerticalRunMaskLayout(maxLineLen)
+		default:
+			panic(unexpectedBoundingMode)
+		}
+	} else {
+		switch self.boundingMode & ^noDescent {
+		case LogicalBounding:
+			self.computeRunLogicalLayout(maxLineLen)
+		case MaskBounding:
+			self.computeRunMaskLayout(maxLineLen)
+		default:
+			panic(unexpectedBoundingMode)
+		}
 	}
+	
 }
 
 // Precondition: except glyph indices, run data has been cleared 
@@ -108,13 +137,13 @@ func (self *Renderer) computeRunLogicalLayout(maxLineLen int) {
 	currentStrand := self.Strand()
 	currentFont   := currentStrand.Font()
 	currentScale  := int(self.scale)
-	currentHorzInterspacing := strandFullHorzInterspacing(currentStrand)*currentScale
+	currentGlyphInterspacing := strandFullGlyphInterspacing(currentStrand)*currentScale
 	var layoutBreak layoutLineBreakTempVariables
-	layoutBreak.Init(strandFullVertLineHeight(currentStrand)*currentScale)
-	self.run.firstLineAscent = int(currentFont.Metrics().Ascent())*currentScale
-	self.run.top = -self.run.firstLineAscent
+	layoutBreak.Init(strandFullLineHeight(currentStrand)*currentScale)
+	self.run.firstRowAscent = int(currentFont.Metrics().Ascent())*currentScale
+	self.run.top = -self.run.firstRowAscent
 	if self.boundingMode & noDescent == 0 {
-		self.run.lastLineDescent = int(currentFont.Metrics().Descent())*currentScale
+		self.run.lastRowDescent = int(currentFont.Metrics().Descent())*currentScale
 	}
 
 	var prevEffectiveGlyph ggfnt.GlyphIndex = ggfnt.GlyphMissing
@@ -134,7 +163,7 @@ func (self *Renderer) computeRunLogicalLayout(maxLineLen int) {
 			if advance < 0 || advance > 65535 { panic("advance > 65535") } // discretional assertion
 			self.run.advances[index] = uint16(advance)
 			x += prevInterspacing + kerning + advance
-			prevInterspacing = currentHorzInterspacing
+			prevInterspacing = currentGlyphInterspacing
 			prevEffectiveGlyph = glyphIndex
 
 			// line wrapping pain
@@ -202,9 +231,9 @@ func (self *Renderer) computeRunMaskLayout(maxLineLen int) {
 	currentStrand := self.Strand()
 	currentFont   := currentStrand.Font()
 	currentScale  := int(self.scale)
-	currentHorzInterspacing := strandFullHorzInterspacing(currentStrand)*currentScale
+	currentGlyphInterspacing := strandFullGlyphInterspacing(currentStrand)*currentScale
 	var layoutBreak layoutLineBreakTempVariables
-	layoutBreak.Init(strandFullVertLineHeight(currentStrand)*currentScale)
+	layoutBreak.Init(strandFullLineHeight(currentStrand)*currentScale)
 
 	var prevEffectiveGlyph ggfnt.GlyphIndex = ggfnt.GlyphMissing
 	var prevInterspacing, prevMaskRight, maskLeft int = 0, -9999, +9999
@@ -243,23 +272,23 @@ func (self *Renderer) computeRunMaskLayout(maxLineLen int) {
 						self.run.top = y // this is not correct here yet, but it's corrected with first line ascent later
 					}
 					if firstNonEmptyLine == 1 {
-						self.run.firstLineAscent = max(self.run.firstLineAscent, -bounds.Min.Y*currentScale)
+						self.run.firstRowAscent = max(self.run.firstRowAscent, -bounds.Min.Y*currentScale)
 					}
 					if self.boundingMode & noDescent == 0 { // descent case
-						self.run.lastLineDescent = max(self.run.lastLineDescent, bounds.Max.Y*currentScale)
+						self.run.lastRowDescent = max(self.run.lastRowDescent, bounds.Max.Y*currentScale)
 					}
 					elevation := min(bounds.Max.Y*currentScale, 0)
-					self.run.bottom = max(self.run.bottom, y + elevation, y + elevation + self.run.lastLineDescent)
+					self.run.bottom = max(self.run.bottom, y + elevation, y + elevation + self.run.lastRowDescent)
 					
 					prevMaskRight = maskRight // this must stay inside this if
 				}
 				x += prevInterspacing + kerning + advance
-				prevInterspacing = currentHorzInterspacing
+				prevInterspacing = currentGlyphInterspacing
 				prevEffectiveGlyph = glyphIndex
 			} else {
 				index, x = layoutWrap.GlyphBreak(self, currentStrand, glyphIndex, index, prevMaskRight, maskRight)
 				y = layoutBreak.NotifyBreak(self, maskLeft, x, y)
-				self.run.lastLineDescent = 0
+				self.run.lastRowDescent = 0
 				x, prevInterspacing, prevMaskRight, maskLeft = 0, 0, -9999, 9999
 				prevEffectiveGlyph = ggfnt.GlyphMissing
 				if firstNonEmptyLine == 1 { firstNonEmptyLine = 2 }
@@ -274,7 +303,7 @@ func (self *Renderer) computeRunMaskLayout(maxLineLen int) {
 					// apply break
 					y = layoutBreak.NotifyBreak(self, maskLeft, prevMaskRight, y)
 					layoutWrap.PostBreakUpdate(index + 1)
-					self.run.lastLineDescent = 0
+					self.run.lastRowDescent = 0
 					x, prevInterspacing, prevMaskRight, maskLeft = 0, 0, -9999, 9999
 					prevEffectiveGlyph = ggfnt.GlyphMissing
 					if firstNonEmptyLine == 1 { firstNonEmptyLine = 2 }
@@ -297,7 +326,7 @@ func (self *Renderer) computeRunMaskLayout(maxLineLen int) {
 	}
 
 	// final adjustments
-	self.run.top -= self.run.firstLineAscent
+	self.run.top -= self.run.firstRowAscent
 	self.run.left = min(self.run.left, maskLeft)
 	if prevMaskRight > self.run.right { self.run.right = prevMaskRight }
 	lineLen := self.run.right - self.run.left
@@ -305,10 +334,6 @@ func (self *Renderer) computeRunMaskLayout(maxLineLen int) {
 	
 	self.run.bottom = max(self.run.bottom, self.run.top)
 	self.run.left   = min(self.run.right, self.run.left)
-}
-
-func (self *Renderer) computeRunAdvancesWithWrap(maxLineLen int) (width, height int) {
-	panic("unimplemented")
 }
 
 func (self *Renderer) computeLineStart(o int, lineIndex uint16) int {

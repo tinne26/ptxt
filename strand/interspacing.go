@@ -1,21 +1,21 @@
 package strand
 
-// Returns the current horizontal interspacing shift.
-func (self *Strand) HorzInterspacingShift() int8 {
-	return self.interspacingShiftHorz
+// Returns the current glyph interspacing shift.
+func (self *Strand) GlyphInterspacingShift() int8 {
+	return self.interspacingShiftGlyph
 }
 
-// Returns the current vertical interspacing shift.
-func (self *Strand) VertInterspacingShift() int8 {
-	return self.interspacingShiftVert
+// Returns the current line interspacing shift.
+func (self *Strand) LineInterspacingShift() int8 {
+	return self.interspacingShiftLine
 }
 
-// Modifies the current horizontal interspacing shift.
-func (self *Strand) SetHorzInterspacingShift(value int8) {
-	self.interspacingShiftHorz = value
+// Modifies the current glyph interspacing shift.
+func (self *Strand) SetGlyphInterspacingShift(value int8) {
+	self.interspacingShiftGlyph = value
 }
 
-// Modifies the current vertical interspacing shift.
-func (self *Strand) SetVertInterspacingShift(value int8) {
-	self.interspacingShiftVert = value
+// Modifies the current line interspacing shift.
+func (self *Strand) SetLineInterspacingShift(value int8) {
+	self.interspacingShiftLine = value
 }

@@ -121,9 +121,9 @@ func (self *layoutLineBreakTempVariables) NotifyTextEnd(renderer *Renderer, x in
 	if x > renderer.run.right { renderer.run.right = x }
 	renderer.run.lineLengths = append(renderer.run.lineLengths, uint16(x))
 	if self.lineBreaksOnly {
-		renderer.run.bottom -= renderer.run.firstLineAscent
+		renderer.run.bottom -= renderer.run.firstRowAscent
 	} else {
-		renderer.run.bottom += renderer.run.lastLineDescent
+		renderer.run.bottom += renderer.run.lastRowDescent
 	}
 }
 
@@ -149,6 +149,13 @@ func (self *lineBreakTempVariables) ApplyHorzBreak(renderer *Renderer, ox, y int
 	x := renderer.computeLineStart(ox, self.lineIndex)
 	y += self.getLineBreakHeight(renderer)
 	return x, y
+}
+
+func (self *lineBreakTempVariables) ApplyVertBreak(renderer *Renderer, x, oy int) (newX, newY int) {
+	self.lineIndex += 1
+	self.consecutiveLineBreaks += 1
+	x += self.getLineBreakHeight(renderer)
+	return x, renderer.computeVertLineStart(oy, self.lineIndex)
 }
 
 func (self *lineBreakTempVariables) ApplySidewaysBreak(renderer *Renderer, x, oy int) (int, int) {

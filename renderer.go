@@ -55,15 +55,16 @@ type Renderer struct {
 		//       this is checked while we generate the slices and so on.
 		glyphIndices []ggfnt.GlyphIndex // for twine measuring and drawing, already on the relevant font
 		lineLengths []uint16
-		advances []uint16 // for twine measuring and drawing, already scaled
-		kernings []int16 // for twine measuring and drawing, already scaled (int16 is such a waste...)
+		advances []uint16 // for measuring and drawing, already scaled
+		horzShifts []uint16 // for vertical measuring and drawing, already scaled
+		kernings []int16 // for measuring and drawing, already scaled (int16 is such a waste...)
 		wrapIndices []uint16 // indices before which we append wrap line breaks
 		                     // (top bit [0x8000] used as replace bit flag [0x7FFF for value])
 		// NOTE: (we could probably join advances + kernings into a single int16?)
 
 		// aux data for some specific use-cases
-		firstLineAscent int // we need this for reused draws. already scaled
-		lastLineDescent int
+		firstRowAscent int // we need this for reused draws. already scaled
+		lastRowDescent int // "row" is equivalent to "line" for all aligns except Vertical
 		isMultiline bool // necessary for LastBaseline align
 	}
 }
@@ -239,7 +240,7 @@ func (self *Renderer) DrawWithWrap(target core.Target, text string, x, y int, ma
 	// convert the input from code points to glyphs
 	// (this includes rewrite rules and glyph selection)
 	if self.Strand() == nil {
-		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
+		panic("ptxt.Renderer can't operate with a nil strand... maybe someone forgot to Renderer.SetStrand()?")
 	}
 
 	mapping := self.Strand().Mapping()
@@ -308,7 +309,7 @@ func (self *Renderer) MeasureWithWrap(text string, maxLineLen int) (width, heigh
 	// it an Advanced() flag too, but it seems a bit too much to me.
 
 	if self.Strand() == nil {
-		panic("ptxt.Renderer can't operate with a nil strand... maybe you forgot to Renderer.SetStrand()?")
+		panic("ptxt.Renderer can't operate with a nil strand... maybe someone forgot to Renderer.SetStrand()?")
 	}
 
 	// convert the input from code points to glyphs

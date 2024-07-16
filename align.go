@@ -121,11 +121,16 @@ func (self Align) horzString() string {
 // To retrieve or compare the individual components, avoid
 // bitwise operations and use [Align.Vert]() and [Align.Horz]()
 // instead.
+//
+// Note: LastBaseline is undefined for [Vertical] rendering
+// and will panic.
 const (
 	// Horizontal aligns
 	Left       Align = 0b0010_0000
 	HorzCenter Align = 0b0100_0000
 	Right      Align = 0b1000_0000
+	// TODO: a neutral align might be relevant for vertical text (HorzNeutral, acts as Left on
+	//       any direction that's not Vertical?)
 
 	// Vertical aligns
 	Top          Align = 0b0000_0001 // top of font's ascent

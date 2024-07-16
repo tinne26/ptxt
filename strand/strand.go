@@ -35,8 +35,8 @@ type Strand struct {
 	flags uint8
 
 	// spacing
-	interspacingShiftHorz int8
-	interspacingShiftVert int8
+	interspacingShiftGlyph int8
+	interspacingShiftLine int8
 
 	// settings and custom glyphs
 	settings ggfnt.SettingsCache

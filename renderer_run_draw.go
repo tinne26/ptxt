@@ -11,7 +11,7 @@ func (self *Renderer) drawText(target core.Target, x, y int) {
 	case Horizontal:
 		self.drawTextHorz(target, x, y)
 	case Vertical:
-		panic("unimplemented")
+		self.drawTextVert(target, x, y)
 	case Sideways:
 		self.drawTextSideways(target, x, y)
 	case SidewaysRight:
@@ -68,13 +68,13 @@ func (self *Renderer) runHorzIterate(target core.Target, maskDrawParams MaskDraw
 	// helper variables
 	ox := maskDrawParams.X
 	currentStrand := self.Strand()
-	currentHorzInterspacing := strandFullHorzInterspacing(currentStrand)*maskDrawParams.Scale
+	currentGlyphInterspacing := strandFullGlyphInterspacing(currentStrand)*maskDrawParams.Scale
 
 	// set up wrap info
 	var drawWrapTemps drawWrapTempVariables
 	drawWrapTemps.Init(self)
 	var lineBreakTemps lineBreakTempVariables
-	lineBreakTemps.SetBreakHeight(strandFullVertLineHeight(currentStrand)*maskDrawParams.Scale)
+	lineBreakTemps.SetBreakHeight(strandFullLineHeight(currentStrand)*maskDrawParams.Scale)
 
 	// iteration
 	var x, y int = self.computeLineStart(ox, 0), maskDrawParams.Y
@@ -95,12 +95,110 @@ func (self *Renderer) runHorzIterate(target core.Target, maskDrawParams MaskDraw
 			maskDrawParams.X = x + offsetX
 			maskDrawParams.Y = y + offsetY
 			drawFunc(target, glyphIndex, maskDrawParams)
-			x += int(self.run.advances[index]) + currentHorzInterspacing
+			x += int(self.run.advances[index]) + currentGlyphInterspacing
 		} else { // control glyph
 			switch glyphIndex {
 			case ggfnt.GlyphNewLine:
 				if !self.elideLineBreak(index) {
 					x, y = lineBreakTemps.ApplyHorzBreak(self, ox, y)
+				}
+			case ggfnt.GlyphMissing:
+				// should typically be triggered at an earlier point,
+				// so I'm not even sure you can reach this normally
+				panic("missing glyph")
+			case internal.TwineEffectMarkerGlyph:
+				panic("unimplemented")
+			default:
+				// other control glyphs to be fully ignored
+				// TODO: or do we need to report any of these control glyphs,
+				// somewhow, to the end user? maybe. maybe we need a separate
+				// callback for it, and we can check the custom glyph range
+			}
+		}
+	}
+}
+
+// --- horz ---
+
+func (self *Renderer) drawTextVert(target core.Target, ox, oy int) {	
+	fontStrand := self.Strand()
+	drawParams := self.prepareDrawParams(ox, oy)
+
+	// draw shadow
+	shadowStrand := fontStrand.Shadow().GetStrand()
+	if shadowStrand != nil {
+		var offsetX, offsetY int
+		drawParams.RGBA, offsetX, offsetY = self.prepareShadowDraw(fontStrand)
+		lnkSetBlendMode(shadowStrand, self.blendMode)
+		if self.drawFunc != nil {
+			self.runVertIterate(target, drawParams, offsetX, offsetY, self.drawFunc)
+		} else {
+			self.runVertIterate(target, drawParams, offsetX, offsetY,  
+				func(target core.Target, glyphIndex ggfnt.GlyphIndex, params MaskDrawParameters) {
+					mask := self.loadMask(glyphIndex, shadowStrand.Font())
+					if mask != nil {
+						lnkDrawHorzMask(shadowStrand, target, mask, params.X, params.Y, params.Scale, params.RGBA)
+					}
+				},
+			)
+		}
+	}
+
+	// draw main text
+	drawParams.RGBA = self.prepareMainDraw(fontStrand)
+	if self.drawFunc != nil {
+		self.runVertIterate(target, drawParams, 0, 0, self.drawFunc)
+	} else {
+		lnkSetBlendMode(fontStrand, self.blendMode)
+		self.runVertIterate(target, drawParams, 0, 0,
+			func(target core.Target, glyphIndex ggfnt.GlyphIndex, params MaskDrawParameters) {
+				mask := self.loadMask(glyphIndex, fontStrand.Font())
+				if mask != nil {
+					lnkDrawHorzMask(fontStrand, target, mask, params.X, params.Y, params.Scale, params.RGBA)
+				}
+			},
+		)
+	}
+}
+
+func (self *Renderer) runVertIterate(target core.Target, maskDrawParams MaskDrawParameters, offsetX, offsetY int, drawFunc func(core.Target, ggfnt.GlyphIndex, MaskDrawParameters)) {
+	// helper variables
+	currentStrand := self.Strand()
+	currentGlyphInterspacing := strandFullVertGlyphInterspacing(currentStrand)*maskDrawParams.Scale
+	
+	// set up wrap info
+	var drawWrapTemps drawWrapTempVariables
+	drawWrapTemps.Init(self)
+	var lineBreakTemps lineBreakTempVariables
+	lineBreakTemps.SetBreakHeight(strandFullLineWidth(currentStrand)*maskDrawParams.Scale)
+	
+	// iteration
+	oy := maskDrawParams.Y
+	var x, y int = maskDrawParams.X, self.computeVertLineStart(oy, 0)
+	for index := 0; index < len(self.run.glyphIndices); index++ {
+		// line wrap case
+		if drawWrapTemps.IsLineWrapIndex(index) {
+			elide := drawWrapTemps.WrapTypeIsElide()
+			x, y = lineBreakTemps.ApplyVertBreak(self, x, oy)
+			drawWrapTemps.Update(self)
+			if elide { continue }
+		}
+
+		// general drawing
+		glyphIndex := self.run.glyphIndices[index]
+		if glyphIndex < ggfnt.MaxGlyphs {
+			lineBreakTemps.NotifyNonBreak()
+			y += int(self.run.kernings[index])
+			y += int(self.run.advances[index])
+			maskDrawParams.X = x + offsetX - int(self.run.horzShifts[index])
+			maskDrawParams.Y = y + offsetY
+			drawFunc(target, glyphIndex, maskDrawParams)
+			y += currentGlyphInterspacing
+		} else { // control glyph
+			switch glyphIndex {
+			case ggfnt.GlyphNewLine:
+				if !self.elideLineBreak(index) {
+					x, y = lineBreakTemps.ApplyVertBreak(self, x, oy)
 				}
 			case ggfnt.GlyphMissing:
 				// should typically be triggered at an earlier point,
@@ -165,13 +263,13 @@ func (self *Renderer) runSidewaysIterate(target core.Target, maskDrawParams Mask
 	// helper variables
 	oy := maskDrawParams.Y
 	currentStrand := self.Strand()
-	currentHorzInterspacing := strandFullHorzInterspacing(currentStrand)*maskDrawParams.Scale
+	currentGlyphInterspacing := strandFullGlyphInterspacing(currentStrand)*maskDrawParams.Scale
 
 	// set up wrap info
 	var drawWrapTemps drawWrapTempVariables
 	drawWrapTemps.Init(self)
 	var lineBreakTemps lineBreakTempVariables
-	lineBreakTemps.SetBreakHeight(strandFullVertLineHeight(currentStrand)*maskDrawParams.Scale)
+	lineBreakTemps.SetBreakHeight(strandFullLineHeight(currentStrand)*maskDrawParams.Scale)
 
 	// iteration
 	lsDiff := self.computeLineStart(oy, 0) - oy
@@ -193,7 +291,7 @@ func (self *Renderer) runSidewaysIterate(target core.Target, maskDrawParams Mask
 			maskDrawParams.X = x + offsetY
 			maskDrawParams.Y = y - offsetX
 			drawFunc(target, glyphIndex, maskDrawParams)
-			y -= int(self.run.advances[index]) + currentHorzInterspacing
+			y -= int(self.run.advances[index]) + currentGlyphInterspacing
 		} else { // control glyph
 			switch glyphIndex {
 			case ggfnt.GlyphNewLine:
@@ -263,13 +361,13 @@ func (self *Renderer) runSidewaysRightIterate(target core.Target, maskDrawParams
 	// helper variables
 	oy := maskDrawParams.Y
 	currentStrand := self.Strand()
-	currentHorzInterspacing := strandFullHorzInterspacing(currentStrand)*maskDrawParams.Scale
+	currentGlyphInterspacing := strandFullGlyphInterspacing(currentStrand)*maskDrawParams.Scale
 	
 	// set up wrap info
 	var drawWrapTemps drawWrapTempVariables
 	drawWrapTemps.Init(self)
 	var lineBreakTemps lineBreakTempVariables
-	lineBreakTemps.SetBreakHeight(strandFullVertLineHeight(currentStrand)*maskDrawParams.Scale)
+	lineBreakTemps.SetBreakHeight(strandFullLineHeight(currentStrand)*maskDrawParams.Scale)
 
 	// iteration
 	var x, y int = maskDrawParams.X, self.computeLineStart(oy, 0)
@@ -290,7 +388,7 @@ func (self *Renderer) runSidewaysRightIterate(target core.Target, maskDrawParams
 			maskDrawParams.X = x - offsetY
 			maskDrawParams.Y = y + offsetX
 			drawFunc(target, glyphIndex, maskDrawParams)
-			y += int(self.run.advances[index]) + currentHorzInterspacing
+			y += int(self.run.advances[index]) + currentGlyphInterspacing
 		} else { // control glyph
 			switch glyphIndex {
 			case ggfnt.GlyphNewLine:

@@ -4,7 +4,7 @@ go 1.21.1
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.6.6
-	github.com/tinne26/ggfnt v0.0.0-20240711213800-853b9e774acb
+	github.com/tinne26/ggfnt v0.0.0-20240716095717-52d6f5afe592
 )
 
 require (

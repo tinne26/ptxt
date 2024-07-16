@@ -72,10 +72,8 @@ func (self *Renderer) loadMask(glyphIndex ggfnt.GlyphIndex, font *ggfnt.Font) co
 // renderer's current direction.
 func (self *RendererAdvanced) DrawMask(target core.Target, mask core.GlyphMask, fontStrand *strand.Strand, params MaskDrawParameters) {
 	switch self.direction {
-	case Horizontal:
+	case Horizontal, Vertical:
 		lnkDrawHorzMask(fontStrand, target, mask, params.X, params.Y, params.Scale, params.RGBA)
-	case Vertical:
-		panic("unimplemented")
 	case Sideways:
 		lnkDrawSidewaysMask(fontStrand, target, mask, params.X, params.Y, params.Scale, params.RGBA)
 	case SidewaysRight:
@@ -137,6 +135,10 @@ func (self *RendererAdvanced) GetBoundingMode() BoundingMode {
 func (self *RendererAdvanced) LastBoundsOffset() (int, int) {
 	return self.run.left, self.run.top
 }
+
+// This would also be interesting.
+// func (self *RendererAdvanced) LastOpFinalGlyphOrigin() (int, int)
+// func (self *RendererAdvanced) FinalGlyphOrigin() (int, int)
 
 // Utility method to cache the glyphs of the given text in advance.
 // Notice that in some extreme cases, if the cache is too small or
