@@ -54,9 +54,9 @@ func (self *Renderer) computeVerticalRunLogicalLayout(maxLineLen int) {
 				layoutBreak.UpdateMaxRightAdvance(int(placement.Advance)*currentScale - horzShift)
 				layoutWrap.GlyphNonBreak(currentStrand, glyphIndex, index, memoY, yWrap)
 			} else {
-				//var yWithBottom int
-				index, _ = layoutWrap.GlyphBreak(self, currentStrand, glyphIndex, index, memoY, yWrap)
-				self.run.right = layoutBreak.NotifyBreak(self, self.run.top, memoY, self.run.right)
+				var yWithBottom int
+				index, yWithBottom = layoutWrap.GlyphBreak(self, currentStrand, glyphIndex, index, memoY, yWrap)
+				self.run.right = layoutBreak.NotifyBreak(self, self.run.top, yWithBottom, self.run.right)
 				y, prevInterspacing, prevBottomAdvance, prevTopAdvance = 0, 0, 0, 0
 				prevEffectiveGlyph = ggfnt.GlyphMissing
 				continue
@@ -68,7 +68,7 @@ func (self *Renderer) computeVerticalRunLogicalLayout(maxLineLen int) {
 					// line break should be elided, absorbed by immediately previous line wrapping break
 				} else {
 					// apply break
-					self.run.right = layoutBreak.NotifyBreak(self, self.run.top, y, self.run.right)
+					self.run.right = layoutBreak.NotifyBreak(self, self.run.top, y + prevBottomAdvance, self.run.right)
 					y, prevInterspacing, prevBottomAdvance, prevTopAdvance = 0, 0, 0, 0
 					prevEffectiveGlyph = ggfnt.GlyphMissing
 					layoutWrap.PostBreakUpdate(index + 1)
