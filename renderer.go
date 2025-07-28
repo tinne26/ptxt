@@ -161,7 +161,7 @@ func (self *Renderer) SetColor(rgba color.RGBA) {
 // use [Renderer.SetAlign](ptxt.[Right]) and similar to change only one of the
 // components at a time.
 // 
-// [wasm example]: https://tinne26.github.io/ptxt-examples/align
+// [wasm example]: https://tinne26.github.io/ptxt-examples/aligns
 func (self *Renderer) SetAlign(align Align) {
 	self.align = self.align.Adjusted(align)
 }
